@@ -20,14 +20,7 @@
 
 import struct
 
-
-class TruncatedError(Exception):
-    pass
-
-
-class CorruptedError(Exception):
-    pass
-
+from .exceptions import TruncatedError, CorruptedError
 
 class BitPackedBuffer:
     def __init__(self, contents, endian='big'):
