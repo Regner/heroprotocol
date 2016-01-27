@@ -37,7 +37,11 @@ class HeroProtocol(object):
             replay_path (str): Path to the .StormReplay file to be parsed.
 
         """
+        self._replay_path = replay_path
         self._archive = MPQArchive(replay_path)
+
+    def __repr__(self):
+        return '<HeroProtocol: {}>'.format(self._replay_path)
 
     @property
     def protocol(self):
