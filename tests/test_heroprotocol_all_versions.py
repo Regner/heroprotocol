@@ -29,6 +29,10 @@ def get_test_versions():
 class TestHeroProtocolAllVersions:
     versions = get_test_versions()
 
+    def test_repre(self, version):
+        hp = HeroProtocol(version)
+        assert hp.__repr__() == '<HeroProtocol: {}>'.format(version)
+
     def test_decode_header(self, version):
         hp = HeroProtocol(version)
         hp.decode_header()
@@ -43,15 +47,18 @@ class TestHeroProtocolAllVersions:
 
     def test_decode_replay_game_events(self, version):
         hp = HeroProtocol(version)
-        hp.decode_replay_game_events()
+        for x in hp.decode_replay_game_events():
+            pass
 
     def test_decode_replay_message_events(self, version):
         hp = HeroProtocol(version)
-        hp.decode_replay_message_events()
+        for x in hp.decode_replay_message_events():
+            pass
 
     def test_decode_replay_tracker_events(self, version):
         hp = HeroProtocol(version)
-        hp.decode_replay_tracker_events()
+        for x in hp.decode_replay_tracker_events():
+            pass
 
     def test_decode_replay_attributes_events(self, version):
         hp = HeroProtocol(version)
