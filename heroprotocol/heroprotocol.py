@@ -7,6 +7,7 @@ from .protocols import protocol29406
 from .exceptions import ProtocolNotFound
 from .decoders import BitPackedBuffer, BitPackedDecoder, VersionedDecoder
 
+
 class HeroProtocol(object):
     """Provides a wraper around the protocol interface.
 
@@ -69,13 +70,13 @@ class HeroProtocol(object):
             contents = self._archive.header['user_data_header']['content']
             decoder = VersionedDecoder(contents, protocol29406.typeinfos)
             header = decoder.instance(protocol29406.replay_header_typeid)
-            baseBuild = header['m_version']['m_baseBuild']
+            base_build = header['m_version']['m_baseBuild']
 
             try:
-                self._protocol = import_module('heroprotocol.protocols.protocol{}'.format(baseBuild))
+                self._protocol = import_module('heroprotocol.protocols.protocol{}'.format(base_build))
 
             except NameError:
-                raise ProtocolNotFound('Protocol not found for base: {}'.format(baseBuild))
+                raise ProtocolNotFound('Protocol not found for base: {}'.format(base_build))
 
         return self._protocol
 
@@ -90,7 +91,6 @@ class HeroProtocol(object):
         contents = self._archive.header['user_data_header']['content']
         decoder = VersionedDecoder(contents, self.protocol.typeinfos)
         return decoder.instance(self.protocol.replay_header_typeid)
-
 
     def decode_replay_details(self):
         """Decodes and returns the game details from the contents byte string.
@@ -195,23 +195,24 @@ class HeroProtocol(object):
 
         """
         contents = self._archive.read_file('replay.attributes.events')
-        buffer = BitPackedBuffer(contents, 'little')
+        bit_buffer = BitPackedBuffer(contents, 'little')
         attributes = {}
 
-        if not buffer.done():
-            attributes['source'] = buffer.read_bits(8)
-            attributes['mapNamespace'] = buffer.read_bits(32)
-            count = buffer.read_bits(32)
+        if not bit_buffer.done():
+            attributes['source'] = bit_buffer.read_bits(8)
+            attributes['mapNamespace'] = bit_buffer.read_bits(32)
             attributes['scopes'] = {}
-            while not buffer.done():
-                value = {}
-                value['namespace'] = buffer.read_bits(32)
-                value['attrid'] = attrid = buffer.read_bits(32)
-                scope = buffer.read_bits(8)
-                value['value'] = buffer.read_aligned_bytes(4)[::-1].strip('\x00')
-                if not scope in attributes['scopes']:
+            bit_buffer.read_bits(32)
+
+            while not bit_buffer.done():
+                value = dict()
+                value['namespace'] = bit_buffer.read_bits(32)
+                value['attrid'] = attrid = bit_buffer.read_bits(32)
+                scope = bit_buffer.read_bits(8)
+                value['value'] = bit_buffer.read_aligned_bytes(4)[::-1].strip('\x00')
+                if scope not in attributes['scopes']:
                     attributes['scopes'][scope] = {}
-                if not attrid in attributes['scopes'][scope]:
+                if attrid not in attributes['scopes'][scope]:
                     attributes['scopes'][scope][attrid] = []
                 attributes['scopes'][scope][attrid].append(value)
         return attributes
@@ -257,18 +258,18 @@ class HeroProtocol(object):
     @staticmethod
     def _varuint32_value(value):
         """Returns the numeric value from a SVarUint32 instance."""
-        for k,v in value.iteritems():
+        for k, v in value.iteritems():
             return v
         return 0
 
+    @staticmethod
+    def unit_tag(unit_tag_index, unit_tag_recycle):
+        return (unit_tag_index << 18) + unit_tag_recycle
 
-    def unit_tag(self, unitTagIndex, unitTagRecycle):
-        return (self.protocol.unitTagIndex << 18) + self.protocol.unitTagRecycle
+    @staticmethod
+    def unit_tag_index(unit_tag):
+        return (unit_tag >> 18) & 0x00003fff
 
-
-    def unit_tag_index(self, unitTag):
-        return (self.protocol.unitTag >> 18) & 0x00003fff
-
-
-    def unit_tag_recycle(self, unitTag):
-        return (self.protocol.unitTag) & 0x0003ffff
+    @staticmethod
+    def unit_tag_recycle(unit_tag):
+        return (unit_tag) & 0x0003ffff
