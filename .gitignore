@@ -1,7 +1,6 @@
 *.DS_Store
 
 *.SC2Replay
-*.StormReplay
 
 # Virtual Environments
 env/
@@ -20,3 +19,4 @@ output.txt
 
 # Pycharm
 .idea/
+.cache/
