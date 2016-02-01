@@ -5,6 +5,7 @@ from importlib import import_module
 
 from .protocols import protocol29406
 from .exceptions import ProtocolNotFound
+from .decoders import BitPackedBuffer, BitPackedDecoder, VersionedDecoder
 
 class HeroProtocol(object):
     """Provides a wraper around the protocol interface.
@@ -64,10 +65,10 @@ class HeroProtocol(object):
             return self._protocol
 
         except AttributeError:
-            contents = self._archive.header['user_data_header']['content']
-
             # It doesn't matter which protocol we use to load the headers
-            header = protocol29406.decode_replay_header(contents)
+            contents = self._archive.header['user_data_header']['content']
+            decoder = VersionedDecoder(contents, protocol29406.typeinfos)
+            header = decoder.instance(protocol29406.replay_header_typeid)
             baseBuild = header['m_version']['m_baseBuild']
 
             try:
@@ -79,7 +80,7 @@ class HeroProtocol(object):
         return self._protocol
 
     def decode_header(self):
-        """Header for the replay file.
+        """Decodes and return the replay header from the contents byte string.
 
         Returns:
             dict
@@ -87,11 +88,12 @@ class HeroProtocol(object):
 
         """
         contents = self._archive.header['user_data_header']['content']
-        return self.protocol.decode_replay_header(contents)
+        decoder = VersionedDecoder(contents, self.protocol.typeinfos)
+        return decoder.instance(self.protocol.replay_header_typeid)
 
 
     def decode_replay_details(self):
-        """A basic overview of a replays details.
+        """Decodes and returns the game details from the contents byte string.
 
         This includes higher level things such as the player list, the player's
         heroes, the map name, and more.
@@ -101,63 +103,172 @@ class HeroProtocol(object):
 
         """
         contents = self._archive.read_file('replay.details')
-        return self.protocol.decode_replay_details(contents)
+        decoder = VersionedDecoder(contents, self.protocol.typeinfos)
+        return decoder.instance(self.protocol.game_details_typeid)
 
     def decode_replay_initdata(self):
-        """
+        """Decodes and return the replay init data from the contents byte string.
 
         Returns:
             dict
 
         """
         contents = self._archive.read_file('replay.initData')
-        return self.protocol.decode_replay_initdata(contents)
+        decoder = BitPackedDecoder(contents, self.protocol.typeinfos)
+        return decoder.instance(self.protocol.replay_initdata_typeid)
 
     def decode_replay_game_events(self):
-        """
+        """Decodes and yields each game event from the contents byte string.
 
         Returns:
             generator
 
         """
         contents = self._archive.read_file('replay.game.events')
-        yield self.protocol.decode_replay_game_events(contents)
+        decoder = BitPackedDecoder(contents, self.protocol.typeinfos)
+        events = self._decode_event_stream(
+            decoder,
+            self.protocol.game_eventid_typeid,
+            self.protocol.game_event_types,
+            decode_user_id=True
+        )
+
+        for event in events:
+            yield event
 
     def decode_replay_message_events(self):
-        """
+        """Decodes and yields each message event from the contents byte string.
 
         Returns:
             generator
 
         """
+
         contents = self._archive.read_file('replay.message.events')
-        yield self.protocol.decode_replay_message_events(contents)
+        decoder = BitPackedDecoder(contents, self.protocol.typeinfos)
+        events = self._decode_event_stream(
+            decoder,
+            self.protocol.message_eventid_typeid,
+            self.protocol.message_event_types,
+            decode_user_id=True
+        )
+
+        for event in events:
+            yield event
 
     def decode_replay_tracker_events(self):
-        """
+        """Decodes and yields each tracker event from the contents byte string.
 
         Returns:
             generator
 
-        """
-        contents = self._archive.read_file('replay.tracker.events')
 
-        # We possibly want to raise an error here? Not sure, the current command
-        # line interface would just silently skip this if the attr wasn't there.
-        # This implementation provides the same results. Not sure the use case
-        # of this so not sure the best thing to do.
+
+        We possibly want to raise an error here? Not sure, the current command
+        line interface would just silently skip this if the attr wasn't there.
+        This implementation provides the same results. Not sure the use case
+        of this so not sure the best thing to do.
         if hasattr(self.protocol, 'decode_replay_tracker_eventssss'):
             yield self.protocol.decode_replay_tracker_events(contents)
 
         else:
             yield
 
-    def decode_replay_attributes_events(self):
         """
+        contents = self._archive.read_file('replay.tracker.events')
+        decoder = VersionedDecoder(contents, self.protocol.typeinfos)
+        events = self._decode_event_stream(
+            decoder,
+            self.protocol.tracker_eventid_typeid,
+            self.protocol.tracker_event_types,
+            decode_user_id=False
+        )
+
+        for event in events:
+            yield event
+
+    def decode_replay_attributes_events(self):
+        """Decodes and yields each attribute from the contents byte string.
 
         Returns:
             dict
 
         """
         contents = self._archive.read_file('replay.attributes.events')
-        return self.protocol.decode_replay_attributes_events(contents)
+        buffer = BitPackedBuffer(contents, 'little')
+        attributes = {}
+
+        if not buffer.done():
+            attributes['source'] = buffer.read_bits(8)
+            attributes['mapNamespace'] = buffer.read_bits(32)
+            count = buffer.read_bits(32)
+            attributes['scopes'] = {}
+            while not buffer.done():
+                value = {}
+                value['namespace'] = buffer.read_bits(32)
+                value['attrid'] = attrid = buffer.read_bits(32)
+                scope = buffer.read_bits(8)
+                value['value'] = buffer.read_aligned_bytes(4)[::-1].strip('\x00')
+                if not scope in attributes['scopes']:
+                    attributes['scopes'][scope] = {}
+                if not attrid in attributes['scopes'][scope]:
+                    attributes['scopes'][scope][attrid] = []
+                attributes['scopes'][scope][attrid].append(value)
+        return attributes
+
+    def _decode_event_stream(self, decoder, eventid_typeid, event_types, decode_user_id):
+        """Decodes events prefixed with a gameloop and possibly userid."""
+        gameloop = 0
+        while not decoder.done():
+            start_bits = decoder.used_bits()
+
+            # decode the gameloop delta before each event
+            delta = self._varuint32_value(decoder.instance(self.protocol.svaruint32_typeid))
+            gameloop += delta
+
+            # decode the userid before each event
+            if decode_user_id:
+                userid = decoder.instance(self.protocol.replay_userid_typeid)
+
+            # decode the event id
+            eventid = decoder.instance(eventid_typeid)
+            typeid, typename = event_types.get(eventid, (None, None))
+            if typeid is None:
+                raise CorruptedError('eventid(%d) at %s' % (eventid, decoder))
+
+            # decode the event struct instance
+            event = decoder.instance(typeid)
+            event['_event'] = typename
+            event['_eventid'] = eventid
+
+            #  insert gameloop and userid
+            event['_gameloop'] = gameloop
+            if decode_user_id:
+                event['_userid'] = userid
+
+            # the next event is byte aligned
+            decoder.byte_align()
+
+            # insert bits used in stream
+            event['_bits'] = decoder.used_bits() - start_bits
+
+            yield event
+
+    @staticmethod
+    def _varuint32_value(value):
+        """Returns the numeric value from a SVarUint32 instance."""
+        for k,v in value.iteritems():
+            return v
+        return 0
+
+
+    def unit_tag(self, unitTagIndex, unitTagRecycle):
+        return (self.protocol.unitTagIndex << 18) + self.protocol.unitTagRecycle
+
+
+    def unit_tag_index(self, unitTag):
+        return (self.protocol.unitTag >> 18) & 0x00003fff
+
+
+    def unit_tag_recycle(self, unitTag):
+        return (self.protocol.unitTag) & 0x0003ffff
