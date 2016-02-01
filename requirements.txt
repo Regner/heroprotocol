@@ -1,2 +1,6 @@
 mpyq==0.2.0
+
+# Testing
 pytest==2.8.7
+pytest-cov==2.2.0
+coverage==3.7.1

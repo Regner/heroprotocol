@@ -1,5 +1,4 @@
 *.DS_Store
-
 *.SC2Replay
 
 # Virtual Environments
@@ -13,6 +12,7 @@ dist/
 *.egg
 *.egg-info/
 *.pyc
+.coverage
 
 # Output file for testing
 output.txt
