@@ -86,11 +86,14 @@ class HeroProtocol(object):
         Returns:
             dict
 
-
         """
         contents = self._archive.header['user_data_header']['content']
         decoder = VersionedDecoder(contents, self.protocol.typeinfos)
         return decoder.instance(self.protocol.replay_header_typeid)
+
+    def version(self):
+        """Simple helper to wrap decode_header and return the build number specifically."""
+        return self.decode_header()['m_version']['m_baseBuild']
 
     def decode_replay_details(self):
         """Decodes and returns the game details from the contents byte string.
@@ -161,18 +164,6 @@ class HeroProtocol(object):
 
         Returns:
             generator
-
-
-
-        We possibly want to raise an error here? Not sure, the current command
-        line interface would just silently skip this if the attr wasn't there.
-        This implementation provides the same results. Not sure the use case
-        of this so not sure the best thing to do.
-        if hasattr(self.protocol, 'decode_replay_tracker_eventssss'):
-            yield self.protocol.decode_replay_tracker_events(contents)
-
-        else:
-            yield
 
         """
         contents = self._archive.read_file('replay.tracker.events')

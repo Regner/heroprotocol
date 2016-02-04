@@ -1,6 +1,7 @@
 
 
 import os
+import re
 import pytest
 
 from heroprotocol import HeroProtocol
@@ -32,6 +33,12 @@ class TestHeroProtocolAllVersions:
     def test_repre(self, version):
         hp = HeroProtocol(version)
         assert hp.__repr__() == '<HeroProtocol: {}>'.format(version)
+
+    def test_version(self, version):
+        search = '^(tests\/replays\/protocol)(\d*)(\.StormReplay)$'
+        results = re.search(search, version)
+        hp = HeroProtocol(version)
+        assert hp.version() == int(results.group(2))
 
     def test_decode_header(self, version):
         hp = HeroProtocol(version)
