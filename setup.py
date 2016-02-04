@@ -22,6 +22,7 @@ setup(
     long_description=open('README.md').read(),
     license=open('LICENSE').read(),
     classifiers=[
+        'Programming Language :: Python :: 2.7',
         'Development Status :: 3 - Alpha',
         'Environment :: Console',
         'Topic :: Utilities',
